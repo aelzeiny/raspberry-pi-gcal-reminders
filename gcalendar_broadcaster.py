@@ -31,6 +31,7 @@ db = sqlite3.connect('reminders.db')
 polly = boto3.Session(profile_name='personal').client('polly', region_name='us-west-1')
 
 OFFSETS = [5, 0]
+TIMEZONE = pendulum.timezone('America/Los_Angeles')
 
 
 def init_db():
@@ -121,7 +122,7 @@ def get_recent_broadcasted_events(start_dttm: dt.datetime, end_dttm: dt.datetime
 def scan_calendar(cal_key, email, cal_id, voice):
     service = load_or_request_creds(f'{email}.pickle')
     # Call the Calendar API
-    now = pendulum.now(tz=pendulum.timezone('UTC'))
+    now = pendulum.now(tz=TIMEZONE)
     yesterday = pendulum_to_dttm(now - dt.timedelta(days=1))
     tomorrow = pendulum_to_dttm(now + dt.timedelta(days=1))
     print('Getting the upcoming events for ', cal_key)
@@ -138,8 +139,8 @@ def scan_calendar(cal_key, email, cal_id, voice):
         for offset in OFFSETS:
             start = pendulum.parse(
                 event['start'].get('dateTime', event['start'].get('date')),
-                tz=pendulum.timezone(event['start'].get('timeZone', 'America/Los_Angeles'))
-            )
+                tz=pendulum.timezone(event['start'].get('timeZone', TIMEZONE.name))
+            ).astimezone(TIMEZONE)
             if start >= tomorrow or start <= yesterday:
                 continue
             e_id = event['id']
@@ -150,7 +151,7 @@ def scan_calendar(cal_key, email, cal_id, voice):
             has_attendies = 'attendees' in event and len(event['attendees']) > 1
             has_summary = 'summary' in event
             if offsetted_start <= now and broadcast_id not in broadcasted and (has_attendies or not has_summary):
-                event_time = start.astimezone(pendulum.timezone('America/Los_Angeles')).time().strftime('%I:%M')
+                event_time = start.time().strftime('%I:%M')
                 if not offset:
                     announcement = f'{event["summary"]}' if has_summary else f'You have a meeting at {event_time}'
                 else:
